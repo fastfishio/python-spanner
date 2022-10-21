@@ -27,6 +27,9 @@ from .types import DateStr, TimestampStr
 from .utils import sanitize_literals_for_upload
 
 TYPES_MAP = {
+    tuple: spanner.param_types.Array,
+    list: spanner.param_types.Array,
+    type(None): spanner.param_types.BOOL,
     bool: spanner.param_types.BOOL,
     bytes: spanner.param_types.BYTES,
     str: spanner.param_types.STRING,
@@ -285,10 +288,20 @@ def get_param_types(params):
     param_types = {}
 
     for key, value in params.items():
-        type_ = type(value)
-        if type_ in TYPES_MAP:
-            param_types[key] = TYPES_MAP[type_]
-
+        if isinstance(value, (list, tuple)):
+            if not value:
+                param_types[key] = spanner.param_types.Array(None)
+            elif value and isinstance(value[0], (list, tuple)):
+                struct_type = spanner.param_types.Struct(
+                    [ spanner.param_types.StructField('', TYPES_MAP[type(v)])
+                        for v in value[0]
+                    ]
+                )
+                param_types[key] = spanner.param_types.Array(struct_type)
+            else:
+                param_types[key] = spanner.param_types.Array(TYPES_MAP[type(value[0])])
+        else:
+            param_types[key] = TYPES_MAP[type(value)]
     return param_types
 
 
